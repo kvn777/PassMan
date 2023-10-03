@@ -1,0 +1,257 @@
+<style>
+.btn-xs {
+    --bs-btn-padding-y: 0.2rem;
+    --bs-btn-padding-x: 0.2rem;
+    --bs-btn-font-size: 0.6rem;
+}
+</style>
+<div id="wrapper_content" class="d-flex align-items-stretch">
+	<main id="middle" class="flex-fill p-0">
+					<div class="pb-3">
+                      <button class="btn btn-primary" type="button" id="addDataBtn">
+                        Add data
+                      </button>
+                    </div>
+                  
+        <div class="collapse" id="addData">
+			<div class="doc-content p-4 p-md-5">
+				<div class="container-doc">
+					<div class="row g-3">
+                      <div class="col-md-4">
+                        <label class="form-label">Website</label>
+                        <input type="text" class="form-control" value="" id="website" placeholder="domain.tld">
+                      </div>
+                      <div class="col-md-4">
+                        <label class="form-label">User</label>
+                        <input type="text" class="form-control" value="" id="user" placeholder="some name">
+                      </div>
+                      <div class="col-md-4">
+                        <label class="form-label">Password</label>
+                        <input type="text" class="form-control" value="" id="password"  placeholder="***">
+                      </div>
+                      <div class="col-md-12">
+                        <div class="input-group">
+						  <span class="input-group-text">Extra Information</span>
+						  <textarea class="form-control" aria-label="Extra Information" id="extra"></textarea>
+						</div>
+                      </div>
+                      <input type="hidden" id="editid" value="">
+                      <div class="col-12">
+						<button class="btn btn-danger" id="cancel">Cancel</button>
+                        <button class="btn btn-primary" id="submit">Save</button>
+                        <div class="alert alert-danger collapse" role="alert" id="alert">
+							Enter PassPhrase !!
+						</div>
+                      </div>
+                   </div>
+                </div>
+              </div>
+         </div>
+			<div class="row g-0 bg-white">
+					<div class="col-xs-12">
+						<div class="input-group">
+							<span class="input-group-text">Your PassPhrase</span>
+							<input type="password" class="form-control" value="" id="PassPhrase">
+							<button class="btn btn-primary" id="PassPhraseBtn">Decode</button>
+						</div>
+                    </div>				
+				<table id="PassmanTable" class="table-datatable table table-bordered table-hover table-striped" style="width:100%">
+					<thead>
+						<tr>
+							<th>Website</th>
+							<th>User</th>
+							<th>Password</th>
+							<th>Extra</th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody id="passTable">
+						<!-- DATA CONTAINER -->
+					</tbody>
+					<tfoot>
+						<tr>
+							<th>Website</th>
+							<th>User</th>
+							<th>Password</th>
+							<th>Extra</th>
+							<th></th>
+						</tr>
+					</tfoot>
+				</table>
+			</div> 
+	</main>
+</div> 
+    <script src="//code.jquery.com/jquery-3.7.0.js"></script>
+	<script src="//cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+<script>	
+jQuery(document).ready(function() {
+	$('#addDataBtn').click(function(){
+		$('#addData').toggle();
+	});
+
+	$('#cancel').click(function(){
+		clearForm();
+	});
+
+	$('#submit').click(function(){
+		var secretKey = $("#PassPhrase").val();
+		if (secretKey.length==0) $('#alert').show();
+		else {
+			var website = 	encryptMessage($("#website").val(), secretKey);
+			var user = 		encryptMessage($("#user").val(), secretKey);
+			var password = 	encryptMessage($("#password").val(), secretKey);
+			var extra = 	encryptMessage($("#extra").val(), secretKey);
+			var editid=$("#editid").val();
+			
+			$.ajax({
+			  method: "POST",
+			  url: "/",
+			  data: { website: website, user: user, password: password, extra: extra, editid: editid }
+			})
+			  .done(function( data ) {
+				getTable(data);
+				clearForm();
+			  });
+		}
+	});
+	
+	$("#PassPhrase").on("input", function(){
+		$('#alert').hide();
+	});
+
+	$("#PassPhraseBtn").on("click", function(){		
+		var table = $('#PassmanTable').DataTable();
+		// Обход всех строк и столбцов кроме последнего
+		table.rows().every(function(rowIdx, tableLoop, rowLoop) {
+			var rowData = this.data();
+			var secretKey = $("#PassPhrase").val();
+			for (var colIdx = 0; colIdx < rowData.length - 1; colIdx++) {
+				rowData[colIdx] = decryptMessage(rowData[colIdx],secretKey);
+			}
+			this.data(rowData);
+		});
+		table.draw();
+
+		dataTable();
+	});
+	
+	//load data from DB on load
+	$.ajax({
+		  url: "/"
+	  })
+	  .done(function( data ) {
+		getTable(data);
+	});
+	
+	let timeoutID;
+	window.addEventListener("blur", function() {
+			var secretKey = $("#PassPhrase").val();
+			if (secretKey.length!=0) {
+				timeoutID = setTimeout(function() {
+					var table = $('#PassmanTable').DataTable();
+					// Обход всех строк и столбцов кроме последнего
+					table.rows().every(function(rowIdx, tableLoop, rowLoop) {
+						var rowData = this.data();
+						var secretKey = $("#PassPhrase").val();
+						for (var colIdx = 0; colIdx < rowData.length - 1; colIdx++) {
+							rowData[colIdx] = encryptMessage(rowData[colIdx],secretKey);
+						}
+						this.data(rowData);
+					});
+					table.draw();
+					dataTable();
+					$("#PassPhrase").val('');
+				}, 60000);
+		}
+	});
+
+	window.addEventListener("focus", function() {
+		clearTimeout(timeoutID);
+	});
+
+	
+} ); //end onload section
+
+function clearForm() {
+		$("#website").val('');
+		$("#user").val('');
+		$("#password").val('');
+		$("#extra").val('');
+		$("#editid").val('');
+		$('#addData').hide();
+}
+
+function getTable(data) {
+	//Fill data in table
+	jQuery('#PassmanTable').DataTable().destroy();
+	$('#passTable').empty();
+	
+	var secretKey = $("#PassPhrase").val();
+	
+	for(let i = 0; i < data.length; i++) {
+		let row = data[i];
+		if (secretKey.length==0) $('#passTable').append('<tr data-id="'+row.id+'">'+
+															'<td class="enc website">'+row.website+'</td>'+
+															'<td class="enc user">'+row.user+'</td>'+
+															'<td class="enc password">'+row.password+'</td>'+
+															'<td class="enc extra">'+row.extra+'</td>'+
+															'<td><button class="btn btn-xs btn-primary editDataBtn" type="button" data-id="'+row.id+'">Edit</button><button class="btn btn-xs btn-danger delDataBtn" type="button" data-id="'+row.id+'">Delete</button></td></tr>');
+		else $('#passTable').append('<tr data-id="'+row.id+'">'+
+										'<td class="enc website">'+decryptMessage(row.website,secretKey)+'</td>'+
+										'<td class="enc user">'+decryptMessage(row.user,secretKey)+'</td>'+
+										'<td class="enc password">'+decryptMessage(row.password,secretKey)+'</td>'+
+										'<td class="enc extra">'+decryptMessage(row.extra,secretKey)+'</td>'+
+										'<td><button class="btn btn-xs btn-primary editDataBtn" type="button" data-id="'+row.id+'">Edit</button><button class="btn btn-xs btn-danger delDataBtn" type="button" data-id="'+row.id+'">Delete</button></td></tr>');
+	}
+	dataTable();	
+}
+
+function dataTable() {
+	//Init DataTable
+
+	jQuery('.editDataBtn').click(function(){
+			$('#addData').show();
+			var id=$( this ).data( "id" );
+			var website=$('tr[data-id="'+id+'"] .website').text();
+			var user=$('tr[data-id="'+id+'"] .user').text();
+			var password=$('tr[data-id="'+id+'"] .password').text();
+			var extra=$('tr[data-id="'+id+'"] .extra').text();
+			$('#website').val(website);
+			$('#user').val(user);
+			$('#password').val(password);
+			$('#extra').val(extra);			
+			$('#editid').val(id);
+	});	
+	jQuery('.delDataBtn').click(function(){
+			var delid=$( this ).data( "id" );
+			$.ajax({
+			  method: "POST",
+			  url: "/",
+			  data: { delid: delid }
+			})
+			  .done(function( data ) {
+				$('#passTable').html('');
+				getTable(data);
+				clearForm();
+			  });
+			$('tr[data-id="'+delid+'"]').remove();		
+	});			
+	
+	jQuery('#PassmanTable').DataTable( {
+			destroy: true,
+			//order: [[ 3, 'desc' ], [ 0, 'asc' ]]
+		});
+}
+
+function encryptMessage(message, secretKey) {
+  var encryptedMessage = CryptoJS.AES.encrypt(message, secretKey);
+  return encryptedMessage.toString();
+}
+
+function decryptMessage(encryptedMessage, secretKey) {
+  var decryptedBytes = CryptoJS.AES.decrypt(encryptedMessage, secretKey);
+  var decryptedMessage = decryptedBytes.toString(CryptoJS.enc.Utf8);
+  return decryptedMessage;
+}
+</script>
